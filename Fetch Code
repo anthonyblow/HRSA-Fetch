@@ -1,77 +1,41 @@
-mkdir ad-hoc-fetch
-cd ad-hoc-fetch
-npm init -y
-npm install node-fetch jest
-ad-hoc-fetch/
-├── node_modules/
-├── src/
-│   └── fetch.js
-├── tests/
-│   └── fetch.test.js
-├── .gitignore
-├── package.json
-└── README.md
 const fetch = require('node-fetch');
+const FetchData = require('./fetchData');
+jest.mock('node-fetch');
 
-async function retrieve() {
-  let allItems = [];
-  let url = 'https://api.example.com/records';
-  let hasNextPage = true;
+describe('FetchData', () => {
+  beforeEach(() => {
+    fetch.mockClear();
+  });
 
-  while (hasNextPage) {
-    const response = await fetch(url);
-    const data = await response.json();
+  test('fetchPage should fetch data from the correct URL', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [{ id: 1, name: 'Test' }] })
+    });
 
-    allItems = allItems.concat(data.records);
-    hasNextPage = data.nextPage !== null;
-    url = data.nextPage;
-  }
+    const fetchData = new FetchData('/records');
+    const pageData = await fetchData.fetchPage(1);
 
-  const openItems = allItems.filter(item => !item.closed).map(item => ({
-    ...item,
-    isPrimary: ['red', 'blue', 'yellow'].includes(item.color)
-  }));
+    expect(fetch).toHaveBeenCalledWith('/records');
+    expect(pageData.results[0].id).toBe(1);
+  });
 
-  const closedPrimaryCount = allItems.filter(item => item.closed && ['red', 'blue', 'yellow'].includes(item.color)).length;
+  test('fetchAllData should fetch all data pages', async () => {
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [{ id: 1, name: 'Test' }] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [] })
+      });
 
-  return {
-    ids: allItems.map(item => item.id),
-    open: openItems,
-    closedPrimaryCount,
-    previousPage: data.previousPage,
-    nextPage: data.nextPage
-  };
-}
+    const fetchData = new FetchData('/records');
+    const allData = await fetchData.fetchAllData();
 
-module.exports = retrieve;
-const retrieve = require('../src/fetch');
-const fetchMock = require('jest-fetch-mock');
-
-fetchMock.enableMocks();
-
-beforeEach(() => {
-  fetch.resetMocks();
+    expect(allData.length).toBe(1);
+    expect(allData[0].id).toBe(1);
+  });
 });
 
-test('retrieve function', async () => {
-  fetch.mockResponseOnce(JSON.stringify({
-    records: [{ id: 1, color: 'red', closed: false }],
-    nextPage: null,
-    previousPage: null
-  }));
-
-  const result = await retrieve();
-
-  expect(result.ids).toEqual([1]);
-  expect(result.open).toEqual([{ id: 1, color: 'red', closed: false, isPrimary: true }]);
-  expect(result.closedPrimaryCount).toBe(0);
-  expect(result.previousPage).toBe(null);
-  expect(result.nextPage).toBe(null);
-});
-node src/fetch.js
-npm test
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin <repository_url>
-git push -u origin master
